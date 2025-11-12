@@ -21,21 +21,21 @@
 
 	          <div class="col-12 col-md-6 py-3" id="form">
 
-	            <form>
+	            <form @submit.prevent="submitForm">
 
 	              <div class="mb-3">
 	                  <label for="name" class="form-label">Name</label>
-	                  <input type="text" class="form-control form-control-lg" id="name" placeholder="First Name M.I. Last Name">
+	                  <input type="text" class="form-control form-control-lg" id="name" placeholder="First Name M.I. Last Name" v-model="name">
 	              </div>
 
 	              <div class="mb-3">
 	                  <label for="email" class="form-label">Email</label>
-	                  <input type="email" class="form-control form-control-lg" id="email" placeholder="Email">
+	                  <input type="email" class="form-control form-control-lg" id="email" placeholder="Email" v-model="email">
 	              </div>
 
 	              <div class="mb-3">
 	                  <label for="message" class="form-label">Message</label>
-	                  <textarea class="form-control" id="message" rows="6" placeholder="Message"></textarea>
+	                  <textarea class="form-control" id="message" rows="6" placeholder="Message" v-model="message"></textarea>
 	              </div>
 
 	              <div class="d-flex align-items-center justify-content-between">
@@ -44,7 +44,11 @@
 	                  <a href="https://github.com" target="_blank"><img src="/images/contact/contact_github.png" alt="GitHub"></a>
 	                  <a href="https://gitlab.com" target="_blank"><img src="/images/contact/contact_gitlab.png" alt="GitLab"></a>
 	                </div>
-	                <button type="button" class="btn ms-auto" id="submit-button">SUBMIT</button>
+	                <button type="submit" class="btn ms-auto" id="submit-button" :disabled="isLoading">{{isLoading ? "Sending..." : "Submit"}}</button>
+	              </div>
+
+	              <div class="d-flex justify-content-end mt-2">
+	                  <div ref="recaptchaContainer"></div>
 	              </div>
 
 	            </form>
@@ -54,3 +58,110 @@
 	      </div>      
 	  </div>
 </template>
+
+<script setup>
+    
+    import { ref, onMounted, onBeforeUnmount } from 'vue';
+    import { Notyf } from 'notyf';
+    import 'notyf/notyf.min.css';
+
+    const notyf = new Notyf();
+
+    const WEB3FORMS_ACCESS_KEY = "afc84e42-38e9-40b2-95c5-8454cccaada1";
+
+    const subject = "New message from Portfoilio Contact Form";
+
+    const name = ref("");
+    const email = ref("");
+    const message = ref("");
+
+    const isLoading = ref(false);
+
+    const submitForm = async() => {
+
+        if(!recaptchaToken.value){
+            notyf.error('Please verify thhat you are not a robot.');
+            return;
+        }
+        isLoading.value = true;
+
+        try {
+
+            const response = await fetch("https://api.web3forms.com/submit", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify({
+                    access_key: WEB3FORMS_ACCESS_KEY,
+                    subject: subject,
+                    name: name.value,
+                    email: email.value,
+                    message: message.value
+                })
+            })
+            const result = await response.json();
+
+            if( result.success){
+                console.log(result);
+                isLoading.value = false;
+                notyf.success("Message Sent!");
+            }
+        }catch(error){
+            console.log(error);
+            isLoading.value = false;
+            notyf.error("failed to send message");
+        } finally {
+            resetRecaptcha();
+        }
+    }
+
+    const SITE_KEY = '6Ldv7gksAAAAAIdi4-5eb6dZAIi3gbWNFcENmfMk';
+
+    const recaptchaContainer = ref(null);
+    const recaptchaWidgetId = ref(null);
+    const recaptchaToken = ref('');
+
+    function onRecaptchaSuccess(token){
+        recaptchaToken.value = token;
+    }
+
+    function onRecaptchaExpired(){
+        recaptchaToken.value = '';
+    }
+
+    function renderRecaptcha(){
+        if(!window.grecaptcha){
+            console.error('recaptcha not loaded');
+            return;
+        }
+        recaptchaWidgetId.value = window.grecaptcha.render(recaptchaContainer.value, {
+            sitekey: SITE_KEY,
+            size: 'normal',
+            callback: onRecaptchaSuccess,
+            'expired-callback': onRecaptchaExpired
+        });
+    }
+
+    function resetRecaptcha(){
+        if(recaptchaWidgetId.value !== null){
+            window.grecaptcha.reset(recaptchaWidgetId.value);
+            recaptchaToken.value = '';
+        }
+    }
+
+    onMounted(() => {
+        const interval = setInterval(() => {
+            if(window.grecaptcha && window.grecaptcha.render){
+                renderRecaptcha();
+                clearInterval(interval)
+            }
+        }, 100);
+
+        onBeforeUnmount(() => {
+            clearInterval(interval)
+        })
+    });
+
+</script>
